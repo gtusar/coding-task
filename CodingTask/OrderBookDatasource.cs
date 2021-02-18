@@ -29,7 +29,7 @@ namespace CodingTask
 
         public async Task ConnectWS()
         {
-            Hub.Groups.
+            //Hub.Groups.
                 // naredi za vsak tip tradingpaira instanco WS potem grupiraj uporabnike po tipu in jim pošiljaj tudi po tipu
 
             // Connect to Bitstamp web socket
@@ -107,15 +107,6 @@ namespace CodingTask
                     break;
             }
         }
-        //public async Task ConnectToBitstamp(string tradingPair)
-        //{
-        //    using (client = new BitstampWS())
-        //    {
-                
-
-                
-        //    }
-        //}
     }
     public enum DatasourceState
     {
