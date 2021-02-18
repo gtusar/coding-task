@@ -1,3 +1,4 @@
+using CodingTask.Hubs;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpsPolicy;
@@ -22,6 +23,11 @@ namespace CodingTask
         {
 
             services.AddControllersWithViews();
+            services.AddSignalR(o =>
+            {
+                o.EnableDetailedErrors = true;
+            });
+            services.AddSingleton<OrderBookDatasource>();
 
             // In production, the React files will be served from this directory
             services.AddSpaStaticFiles(configuration =>
@@ -52,6 +58,8 @@ namespace CodingTask
 
             app.UseEndpoints(endpoints =>
             {
+                endpoints.MapHub<OrderBookHub>("/orderbookhub");
+
                 endpoints.MapControllerRoute(
                     name: "default",
                     pattern: "{controller}/{action=Index}/{id?}");
