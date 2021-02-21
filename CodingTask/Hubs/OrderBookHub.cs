@@ -9,7 +9,7 @@ namespace CodingTask.Hubs
 {
     public static class UserHandler
     {
-        public static HashSet<string> ConnectedIds = new HashSet<string>();
+        public static Dictionary<string, string> ConnectedClients = new Dictionary<string, string>();
     }
 
     public class OrderBookHub : Hub
@@ -23,24 +23,42 @@ namespace CodingTask.Hubs
 
         public async Task StartReceivingData(string tradingPair)
         {
-            await _datasource.ConnectWS();
+            UserHandler.ConnectedClients.Add(Context.ConnectionId, tradingPair);
+
+            await Groups.AddToGroupAsync(Context.ConnectionId, tradingPair);
             await _datasource.StartReceivingData(tradingPair);
         }
         public async Task StopReceivingData()
         {
-            await _datasource.StopReceivingData();
+            string tradingPair = UserHandler.ConnectedClients.GetValueOrDefault(Context.ConnectionId);
+            UserHandler.ConnectedClients.Remove(Context.ConnectionId);
+            if (tradingPair != null)
+            {
+                await Groups.RemoveFromGroupAsync(Context.ConnectionId, tradingPair);
+                // Unsubscribe in noone listens to current trading pair
+                int currentPairSubscribers = UserHandler.ConnectedClients.Where(c => c.Value == tradingPair).Count();
+                if (currentPairSubscribers == 0) await _datasource.StopReceivingData(tradingPair);
+            }
         }
 
-        public override async Task OnConnectedAsync()
-        {
-            UserHandler.ConnectedIds.Add(Context.ConnectionId);
-            await base.OnConnectedAsync();
-        }
+        //public override async Task OnConnectedAsync()
+        //{
+        //    UserHandler.ConnectedIds.Add(Context.ConnectionId);
+        //    await base.OnConnectedAsync();
+        //}
         public override async Task OnDisconnectedAsync(Exception exception)
         {
-            UserHandler.ConnectedIds.Remove(Context.ConnectionId);
-            // The last who exits closes the light :)
-            if(UserHandler.ConnectedIds.Count == 0) await _datasource.DisconnectWS(); 
+            string tradingPair = UserHandler.ConnectedClients.GetValueOrDefault(Context.ConnectionId);
+            UserHandler.ConnectedClients.Remove(Context.ConnectionId);
+
+            if (tradingPair != null)
+            {
+                await Groups.RemoveFromGroupAsync(Context.ConnectionId, tradingPair);
+                // The last who exits closes the light :)
+                int currentPairSubscribers = UserHandler.ConnectedClients.Where(c => c.Value == tradingPair).Count();
+                if (currentPairSubscribers == 0) await _datasource.DisconnectWS(tradingPair);
+            }
+            
             await base.OnDisconnectedAsync(exception);
         }
     }

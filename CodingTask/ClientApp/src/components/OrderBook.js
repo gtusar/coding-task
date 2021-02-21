@@ -1,71 +1,6 @@
-import React, { Component, useState } from 'react';
-import { Toast, ToastBody, ToastHeader, Button } from 'reactstrap';
-import { ResponsiveBar } from '@nivo/bar';
+import React, { Component, PureComponent } from 'react';
 import * as signalR from "@microsoft/signalr";
-import { extend } from 'jquery';
-
-const OrderBookChart = ({ data }) => (
-    <ResponsiveBar
-        data={data}
-        keys={['bids', 'asks']}
-        indexBy="price"
-        margin={{ top: 50, right: 130, bottom: 70, left: 60 }}
-        padding={0.3}
-        valueScale={{ type: 'linear' }}
-        indexScale={{ type: 'band', round: true }}
-        colors={{ scheme: 'set2' }}
-        colorBy="id"
-        axisBottom={{
-            tickSize: 5,
-            tickPadding: 5,
-            tickRotation: -50,
-            legend: 'Price',
-            legendPosition: 'middle',
-            legendOffset: 32
-        }}
-        axisLeft={{
-            tickSize: 5,
-            tickPadding: 5,
-            tickRotation: 0,
-            legend: 'Volume',
-            legendPosition: 'middle',
-            legendOffset: -40
-        }}
-        labelSkipWidth={12}
-        labelSkipHeight={12}
-        labelTextColor={{ from: 'color', modifiers: [['darker', 1.6]] }}
-        legends={[
-            {
-                dataFrom: 'keys',
-                anchor: 'bottom-right',
-                direction: 'column',
-                justify: false,
-                translateX: 120,
-                translateY: 0,
-                itemsSpacing: 2,
-                itemWidth: 100,
-                itemHeight: 20,
-                itemDirection: 'left-to-right',
-                itemOpacity: 0.85,
-                symbolSize: 20,
-                effects: [
-                    {
-                        on: 'hover',
-                        style: {
-                            itemOpacity: 1
-                        }
-                    }
-                ]
-            }
-        ]}
-        padding={0}
-        enableLabel={false}
-        enableGridX={true}
-        animate={false}
-        motionstiffness={150}
-        motiondamping={1}
-    />
-)
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const connection = new signalR
     .HubConnectionBuilder()
@@ -127,9 +62,10 @@ export class OrderBook extends Component {
 
     updateCharts(response) {
         // update state with chart data
+        const arrayPrototype = ['price','bids','asks'];
         this.setState({
-            orderBookChartData: response.orderBookChartData,
-            marketDepthChartData: response.marketDepthChartData,
+            orderBookChartData: [...arrayPrototype, ...response.orderBookChartData],
+            marketDepthChartData: [...arrayPrototype, ...response.marketDepthChartData],
             allowChartUpdate: false
         });
         // set timer to disable too frequent chart update
@@ -150,25 +86,22 @@ export class OrderBook extends Component {
                     </div>
                 </div>
                 <div className="row">
-                    <div className="col-sm-3">
-                        <select className="form-control" onChange={(e) => this.selectTradingPair(e) }>
-                            {this.state.availableTradingPairs.map(pair => <option key={pair.apiName} value={pair.apiName}>{pair.title}</option>)}
-                        </select>
-                    </div>
-                </div>
-                <div className="row">
                     <div className="col-7" style={{ "width": "0.6vw", "height": "350px" }}>
-                        
+                        <OrderBookBarChart data={this.state.orderBookChartData} />
+                        <OrderBookBarChart data={this.state.marketDepthChartData} />
                     </div>
                     <div className="col-5">
+                        <div className="col-md-5">
+                            <select className="form-control" onChange={(e) => this.selectTradingPair(e)}>
+                                {this.state.availableTradingPairs.map(pair => <option key={pair.apiName} value={pair.apiName}>{pair.title}</option>)}
+                            </select>
+                        </div>
                         <OrderBookTable data={this.state.orderBookData} />
                     </div>
                 </div>
             </div>
         );
     }
-    //{OrderBookChart({ data: this.state.orderBookChartData })}
-    //{ OrderBookChart({ data: this.state.marketDepthChartData }) }
     
     async populateTradingPairsData() {
         const response = await fetch('tradingpairs');
@@ -188,11 +121,12 @@ class OrderBookTable extends Component {
         const bids = data.filter(d => d.bids > 0) || [];
         const asks = data.filter(d => d.asks > 0) || [];
         let rows = [];
-        for (let i = 0; i < Math.max(bids.length, asks.length); i++) {
-            const bid = bids[i];
-            const ask = asks[i];
-            const bidPrice = Number.parseFloat(bid.price);
-            const askPrice = Number.parseFloat(ask.price);
+        const maxRows = Math.max(bids.length, asks.length);
+        for (let i = 0; i < maxRows; i++) {
+            const bid = bids[bids.length - 1 - i] || {price:'',asks:0, bids:0}; // reverse order
+            const ask = asks[i] || { price: '', asks: 0, bids: 0 };
+            const bidPrice = Number.parseFloat(bid.price.replace(',', '.'));
+            const askPrice = Number.parseFloat(ask.price.replace(',', '.'));
             rows.push(
                 <tr key={i}>
                     <td>{(bidPrice * bid.bids).toFixed(4)}</td>
@@ -230,6 +164,34 @@ class OrderBookTable extends Component {
                     </div>
                 </div>
             </div>
+        );
+    }
+}
+
+export default class OrderBookBarChart extends PureComponent {
+    render() {
+        return (
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                    width={400}
+                    height={250}
+                    data={this.props.data}
+                    margin={{
+                        top: 20,
+                        right: 30,
+                        left: 20,
+                        bottom: 5,
+                    }}
+                >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="price" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="bids" stackId="a" fill="#28a745" />
+                    <Bar dataKey="asks" stackId="a" fill="#dc3545" />
+                </BarChart>
+            </ResponsiveContainer>
         );
     }
 }

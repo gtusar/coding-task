@@ -20,12 +20,26 @@ namespace CodingTask
         private CancellationTokenSource CTS;
         private CancellationTokenSource CTSReadLoop;
         private readonly SemaphoreSlim _WSsemaphore = new SemaphoreSlim(1, 1);
-
+        public WebSocketState State
+        {
+            get
+            {
+                return this.WS.State;
+            }
+        }
+        private SubscriptionState _subscriptionStatus { get; set; }
+        public SubscriptionState SubscriptionStatus
+        {
+            get
+            {
+                return _subscriptionStatus;
+            }
+        }
         private string url = "wss://ws.bitstamp.net";
         private string TradingPair { get; set; }
         public int ReceiveBufferSize { get; set; } = 8192;
 
-        public async Task ConnectAsync()
+        private async Task ConnectAsync()
         {
             if (WS != null)
             {
@@ -44,15 +58,30 @@ namespace CodingTask
 
         public async Task Subscribe(string tradingPair = "btceur")
         {
+            
             TradingPair = tradingPair;
-            await Subscription(new Models.Subscribe(TradingPair));
+            if (WS == null || WS.State != WebSocketState.Open)
+            {
+                await ConnectAsync();
+            }
+
+            if(_subscriptionStatus == SubscriptionState.Unsubscribed)
+            {
+                WebSocketResponse response = await Subscription(new Models.Subscribe(TradingPair));
+                _subscriptionStatus = response == WebSocketResponse.Ok ? SubscriptionState.Subscribed : SubscriptionState.Unsubscribed;
+            }
+
             CTSReadLoop = new CancellationTokenSource();
             await Task.Factory.StartNew(ReceiveLoop, CTSReadLoop.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
         public async Task Unsubscribe()
         {
             CTSReadLoop.Cancel();
-            await Subscription(new Models.Unsubscribe(TradingPair));
+            if(_subscriptionStatus == SubscriptionState.Subscribed)
+            {
+                WebSocketResponse response = await Subscription(new Models.Subscribe(TradingPair));
+                _subscriptionStatus = response == WebSocketResponse.Ok ? SubscriptionState.Unsubscribed : SubscriptionState.Subscribed;
+            }
         }
         public async Task DisconnectAsync()
         {
@@ -60,10 +89,22 @@ namespace CodingTask
 
             if (WS.State == WebSocketState.Open)
             {
-                await Subscription(new Models.Unsubscribe(TradingPair));
-                CTS.Cancel(); // After(TimeSpan.FromSeconds(2));
-                await WS.CloseOutputAsync(WebSocketCloseStatus.Empty, "", CancellationToken.None);
-                await WS.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
+                if (_subscriptionStatus != SubscriptionState.Unsubscribed)
+                {
+                    await Subscription(new Models.Unsubscribe(TradingPair));
+                }
+                await _WSsemaphore.WaitAsync();
+                try
+                {
+                    CTSReadLoop.Cancel();
+                    CTS.Cancel();
+                    await WS.CloseOutputAsync(WebSocketCloseStatus.Empty, "", CancellationToken.None);
+                    await WS.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
+                }
+                finally
+                {
+                    _WSsemaphore.Release();
+                }
             }
             if (WS.State == WebSocketState.Closed)
             {
@@ -84,6 +125,7 @@ namespace CodingTask
             MemoryStream outputStream = null;
             WebSocketReceiveResult receiveResult = null;
             var buffer = new byte[ReceiveBufferSize];
+            
             try
             {
                 while (!loopToken.IsCancellationRequested)
@@ -92,10 +134,21 @@ namespace CodingTask
                     do
                     {
                         await _WSsemaphore.WaitAsync();
-                        receiveResult = await WS.ReceiveAsync(buffer, CTS.Token);
-                        _WSsemaphore.Release();
-                        if (receiveResult.MessageType != WebSocketMessageType.Close)
-                            outputStream.Write(buffer, 0, receiveResult.Count);
+                        try
+                        {
+                            receiveResult = await WS.ReceiveAsync(buffer, CTS.Token);
+                            if (receiveResult.MessageType != WebSocketMessageType.Close)
+                                outputStream.Write(buffer, 0, receiveResult.Count);
+                        }
+                        catch
+                        {
+                            await ConnectAsync();
+                            await Subscribe();
+                        }
+                        finally
+                        {
+                            _WSsemaphore.Release();
+                        }
                     }
                     while (!receiveResult.EndOfMessage);
                     if (receiveResult.MessageType == WebSocketMessageType.Close) break;
@@ -110,21 +163,25 @@ namespace CodingTask
             }
         }
 
-        private async Task<ResponseType> Subscription<RequestType>(RequestType message)
+        private async Task<WebSocketResponse> Subscription<RequestType>(RequestType message)
         {
             byte[] sendBytes = Encoding.UTF8.GetBytes(Newtonsoft.Json.JsonConvert.SerializeObject(message));
             var sendBuffer = new ArraySegment<byte>(sendBytes);
+            if (State != WebSocketState.Open) await ConnectAsync();
+
+            bool succeded = false;
+            await _WSsemaphore.WaitAsync();
+            
             try
             {
-                await _WSsemaphore.WaitAsync();
                 await WS.SendAsync(sendBuffer, WebSocketMessageType.Text, endOfMessage: true, cancellationToken: CTS.Token);
-                _WSsemaphore.Release();
-                return ResponseType.Ok;
+                succeded = true;
             }
-            catch (Exception e)
+            finally
             {
-                return ResponseType.Error;
+                _WSsemaphore.Release();                
             }
+            return succeded ? WebSocketResponse.Ok : WebSocketResponse.Error;
         }
 
         private void ReadResponse(Stream inputStream)
@@ -142,14 +199,21 @@ namespace CodingTask
             {
                 inputStream.Dispose();
             }
+            
+            
         }
 
         public void Dispose() => DisconnectAsync().Wait();
 
-        public enum ResponseType
+        public enum WebSocketResponse
         {
             Ok,
             Error
+        }
+        public enum SubscriptionState
+        {
+            Unsubscribed,
+            Subscribed
         }
 
     }

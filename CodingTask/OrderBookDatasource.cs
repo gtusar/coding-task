@@ -16,101 +16,92 @@ namespace CodingTask
         {
             Hub = hub;
         }
-        private readonly SemaphoreSlim _datasourceConnectionLock = new SemaphoreSlim(1, 1);
-        private volatile DatasourceState _datasourceState;
-        private BitstampWS client = null;
-
+        private readonly SemaphoreSlim semaphore = new SemaphoreSlim(1, 1);
+        private Dictionary<string, BitstampWS> clients = new Dictionary<string, BitstampWS>();
         private IHubContext<OrderBookHub> Hub { get; set; }
-        public DatasourceState DatasourceState
-        {
-            get { return _datasourceState; }
-            private set { _datasourceState = value; }
-        }
 
-        public async Task ConnectWS()
-        {
-            //Hub.Groups.
-                // naredi za vsak tip tradingpaira instanco WS potem grupiraj uporabnike po tipu in jim pošiljaj tudi po tipu
-
-            // Connect to Bitstamp web socket
-            if (client == null)
-            {
-                client = new BitstampWS();
-
-                // Add event handlers
-                client.Connected += async (sender, EventArgs) => { await Hub.Clients.All.SendAsync("bitstampConnected"); };
-                client.ResponseReceived += async (sender, eventArgument) => { await Hub.Clients.All.SendAsync("dataReceived", new OrderBookDataModel(eventArgument), new CancellationToken()); };
-                client.Disconnected += async (sender, eventArgument) => { await Hub.Clients.All.SendAsync("bitstampDisconnected"); };
-            }
-            await client.ConnectAsync();
-        }
-        public async Task DisconnectWS()
-        {
-            await client.DisconnectAsync();
-        }
         public async Task StartReceivingData(string tradingPair)
         {
-            await _datasourceConnectionLock.WaitAsync();
+            await semaphore.WaitAsync();
             try
             {
-                if (DatasourceState != DatasourceState.Connected)
+                BitstampWS client = null;
+                if (!clients.ContainsKey(tradingPair))
                 {
-                    DatasourceState = DatasourceState.Connected;
-                    
-                    // Subscribe to order book stream
+                    client = new BitstampWS();
+                    client.Connected += async (sender, eventArguments) => { await InformClientsStateChange(client.State); };
+                    client.Disconnected += async (sender, eventArguments) => { await InformClientsStateChange(client.State); };
+                    client.ResponseReceived += async (sender, eventArgument) => {
+                        await Hub.Clients.Group(tradingPair).SendAsync("dataReceived",
+                            new OrderBookDataModel(eventArgument),
+                            new CancellationToken());
+                    };
+                    clients.Add(tradingPair, client);
                     await client.Subscribe(tradingPair);
-
-                    await InformClientsStateChange(DatasourceState.Connected);
+                }
+                else
+                {
+                    client = clients.GetValueOrDefault(tradingPair);
+                    if (client.SubscriptionStatus == BitstampWS.SubscriptionState.Unsubscribed)
+                    {
+                        await client.Subscribe(tradingPair);
+                    }
                 }
             }
             finally
             {
-                _datasourceConnectionLock.Release();
+                semaphore.Release();
             }
         }
 
-        public async Task StopReceivingData()
+        public async Task StopReceivingData(string tradingPair)
         {
-            await _datasourceConnectionLock.WaitAsync();
+            BitstampWS client = clients.GetValueOrDefault(tradingPair);
+            if (client != null)
+            {
+                await client.Unsubscribe();
+            }
+        }
+
+        public async Task DisconnectWS(string tradingPair)
+        {
+            await semaphore.WaitAsync();
             try
             {
-                if (DatasourceState == DatasourceState.Connected)
+                BitstampWS client = clients.GetValueOrDefault(tradingPair);
+                if (client != null)
                 {
-                    DatasourceState = DatasourceState.Disconnected;
-
-                    // Unsubscribe
                     await client.Unsubscribe();
-                    await InformClientsStateChange(DatasourceState.Disconnected);
+                    await client.DisconnectAsync();
+                    client.Dispose();
+                    clients.Remove(tradingPair);
                 }
             }
             finally
             {
-                _datasourceConnectionLock.Release();
+                semaphore.Release();
             }
         }
-        private async Task InformClientsStateChange(DatasourceState dataSourceState)
+
+    
+        private async Task InformClientsStateChange(WebSocketState dataSourceState)
         {
             switch (dataSourceState)
             {
-                case DatasourceState.Connected:
+                case WebSocketState.Open:
                     {
-                        await Hub.Clients.All.SendAsync("connected");
+                        await Hub.Clients.All.SendAsync("open");
                         break;
                     }
                     
-                case DatasourceState.Disconnected:
+                case WebSocketState.Closed:
                     {
-                        await Hub.Clients.All.SendAsync("disconnected");
+                        await Hub.Clients.All.SendAsync("closed");
                         break;
                     }                    
                 default:
                     break;
             }
         }
-    }
-    public enum DatasourceState
-    {
-        Disconnected,
-        Connected
     }
 }

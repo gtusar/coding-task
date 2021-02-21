@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -17,8 +18,8 @@ namespace CodingTask.Models
 
             if (response.Event == "data")
             {
-                OrderBookData.AddRange(response.Data.Bids.GroupBy(o => o.ElementAt(0)).Select(o => new PriceVolume { Price = o.Key.ToString(), Bids = o.Select(ord => ord.ElementAt(1)).Sum(), Asks= 0 }).TakeLast(10));
-                OrderBookData.AddRange(response.Data.Asks.GroupBy(o => o.ElementAt(0)).Select(o => new PriceVolume { Price = o.Key.ToString(), Bids = 0, Asks = o.Select(ord => ord.ElementAt(1)).Sum() }).Take(10));
+                OrderBookData.AddRange(response.Data.Bids.GroupBy(o => o.ElementAt(0)).OrderBy(g => g.Key).Select(o => new PriceVolume { Price = o.Key.ToString(), Bids = o.Select(ord => ord.ElementAt(1)).Sum(), Asks = 0 }).TakeLast(10));
+                OrderBookData.AddRange(response.Data.Asks.GroupBy(o => o.ElementAt(0)).OrderBy(g => g.Key).Select(o => new PriceVolume { Price = o.Key.ToString(), Bids = 0, Asks = o.Select(ord => ord.ElementAt(1)).Sum() }).Take(10));
 
                 OrderBookChartData.AddRange(ClassifyOrders(response.Data.Bids, OrderType.Bid));
                 OrderBookChartData.AddRange(ClassifyOrders(response.Data.Asks, OrderType.Ask));
@@ -31,7 +32,7 @@ namespace CodingTask.Models
         private List<PriceVolume> ClassifyOrders(List<List<decimal>> orders, OrderType type, bool marketDepth = false)
         {
             List<PriceVolume> result = new List<PriceVolume>();
-            int numberOfBars = 10;
+            int numberOfBars = 30;
             decimal minPrice = orders.OrderBy(o => o[0]).FirstOrDefault().FirstOrDefault();
             decimal maxPrice = orders.OrderByDescending(o => o[0]).FirstOrDefault().FirstOrDefault();
             decimal priceRange = maxPrice - minPrice;
