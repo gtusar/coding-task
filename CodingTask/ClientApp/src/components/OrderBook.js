@@ -45,12 +45,10 @@ export class OrderBook extends Component {
         connection.invoke("StartReceivingData", this.state.selectedTradingPair);
     }
     onSocketConnected(res) {
-        console.info('SocketConnected', res);
+        console.info('SocketConnected');
         this.startReceivingData();
     }
-    onNotifReceived(res) {
-        console.info('Yayyyyy, I just received a notification!!!', res);
-    }
+
     onDataReceived(res) {
         // update order book table
         this.setState({ orderBookData: res.orderBookData });
@@ -62,10 +60,10 @@ export class OrderBook extends Component {
 
     updateCharts(response) {
         // update state with chart data
-        const arrayPrototype = ['price','bids','asks'];
+        // const arrayPrototype = ['price','bids','asks'];
         this.setState({
-            orderBookChartData: [...arrayPrototype, ...response.orderBookChartData],
-            marketDepthChartData: [...arrayPrototype, ...response.marketDepthChartData],
+            orderBookChartData: response.orderBookChartData,
+            marketDepthChartData: response.marketDepthChartData,
             allowChartUpdate: false
         });
         // set timer to disable too frequent chart update
@@ -114,7 +112,7 @@ export class OrderBook extends Component {
     }
 }
 
-class OrderBookTable extends Component {
+export class OrderBookTable extends Component {
 
     renderRows() {
         const data = this.props.data;
@@ -168,7 +166,7 @@ class OrderBookTable extends Component {
     }
 }
 
-export default class OrderBookBarChart extends PureComponent {
+export class OrderBookBarChart extends PureComponent {
     render() {
         return (
             <ResponsiveContainer width="100%" height="100%">

@@ -35,5 +35,11 @@ namespace CodingTask
                     Price = g.Average(p => p.Price)
                 }).ToList();
         }
+        
+        public static OrderBookDataModel GetDataAtTimestamps(DateTime timestamp)
+        {
+            BitstampWSResponse searchResult = collection.AsQueryable().Where(doc => doc.Data.Timestamp == timestamp).FirstOrDefault();
+            return new OrderBookDataModel(searchResult);
+        }
     }
 }

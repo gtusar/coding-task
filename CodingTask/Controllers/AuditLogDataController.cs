@@ -16,5 +16,11 @@ namespace CodingTask.Controllers
         {
             return OrderbookLog.GetAvailableTimestamps();
         }
+
+        [HttpPost]
+        public ActionResult<OrderBookDataModel> GetDataAtTimestamp([FromBody] RequestDate requestDate)
+        {
+            return OrderbookLog.GetDataAtTimestamps(requestDate.Timestamp);
+        }
     }
 }

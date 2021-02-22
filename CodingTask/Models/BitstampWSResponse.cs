@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 
 namespace CodingTask.Models
 {
+    [BsonIgnoreExtraElements]
     public class BitstampWSResponse
     {
         [JsonProperty("data")]
