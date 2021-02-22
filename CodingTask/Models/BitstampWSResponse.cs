@@ -1,4 +1,6 @@
-﻿using Newtonsoft.Json;
+﻿using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,6 +20,7 @@ namespace CodingTask.Models
 
     public class Data
     {
+        [BsonRepresentation(BsonType.DateTime)]
         public DateTime Timestamp { get
             {
                 // Convert from UNIX timestamp
