@@ -58,21 +58,28 @@ namespace CodingTask
 
         public async Task Subscribe(string tradingPair = "btceur")
         {
-            
-            TradingPair = tradingPair;
-            if (WS == null || WS.State != WebSocketState.Open)
+            try
             {
-                await ConnectAsync();
-            }
+                TradingPair = tradingPair;
+                if (WS == null || WS.State != WebSocketState.Open)
+                {
+                    await ConnectAsync();
+                }
 
-            if(_subscriptionStatus == SubscriptionState.Unsubscribed)
+                if (_subscriptionStatus == SubscriptionState.Unsubscribed)
+                {
+                    WebSocketResponse response = await Subscription(new Models.Subscribe(TradingPair));
+                    _subscriptionStatus = response == WebSocketResponse.Ok ? SubscriptionState.Subscribed : SubscriptionState.Unsubscribed;
+                }
+
+                CTSReadLoop = new CancellationTokenSource();
+                await Task.Factory.StartNew(ReceiveLoop, CTSReadLoop.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            }
+            catch
             {
-                WebSocketResponse response = await Subscription(new Models.Subscribe(TradingPair));
-                _subscriptionStatus = response == WebSocketResponse.Ok ? SubscriptionState.Subscribed : SubscriptionState.Unsubscribed;
+                _subscriptionStatus = SubscriptionState.Unsubscribed;
+                return;
             }
-
-            CTSReadLoop = new CancellationTokenSource();
-            await Task.Factory.StartNew(ReceiveLoop, CTSReadLoop.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
         public async Task Unsubscribe()
         {
@@ -140,15 +147,13 @@ namespace CodingTask
                             if (receiveResult.MessageType != WebSocketMessageType.Close)
                                 outputStream.Write(buffer, 0, receiveResult.Count);
                         }
-                        catch
+                        catch (WebSocketException)
                         {
+                            await DisconnectAsync();
                             await ConnectAsync();
-                            await Subscribe();
+                            await Subscribe();                            
                         }
-                        finally
-                        {
-                            _WSsemaphore.Release();
-                        }
+                        _WSsemaphore.Release();
                     }
                     while (!receiveResult.EndOfMessage);
                     if (receiveResult.MessageType == WebSocketMessageType.Close) break;
@@ -177,10 +182,13 @@ namespace CodingTask
                 await WS.SendAsync(sendBuffer, WebSocketMessageType.Text, endOfMessage: true, cancellationToken: CTS.Token);
                 succeded = true;
             }
-            finally
+            catch (WebSocketException)
             {
-                _WSsemaphore.Release();                
+                await DisconnectAsync();
+                await ConnectAsync();
+                await Subscribe();
             }
+            _WSsemaphore.Release();
             return succeded ? WebSocketResponse.Ok : WebSocketResponse.Error;
         }
 

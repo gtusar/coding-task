@@ -32,7 +32,7 @@ namespace CodingTask
                     client.Connected += async (sender, eventArguments) => { await InformClientsStateChange(client.State); };
                     client.Disconnected += async (sender, eventArguments) => { await InformClientsStateChange(client.State); };
                     client.ResponseReceived += async (sender, eventArgument) => {
-                        if(eventArgument.Event == "data")
+                        if(eventArgument!= null && eventArgument.Event == "data")
                         {
                             OrderbookLog.InsetOrderbook(eventArgument);
                             await Hub.Clients.Group(tradingPair).SendAsync("dataReceived",
