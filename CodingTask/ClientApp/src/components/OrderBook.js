@@ -22,33 +22,43 @@ export class OrderBook extends Component {
         }
         this.onDataReceived = this.onDataReceived.bind(this);
         this.updateCharts = this.updateCharts.bind(this);
+        this.startReceivingData = this.startReceivingData.bind(this);
     }
 
     async componentDidMount() {
         await this.populateTradingPairsData();
-
+        await this.connect();
+        connection.on('connected', this.onSocketConnected);
+        connection.on('dataReceived', this.onDataReceived);
+        connection.on('disconnected', this.onSocketDisConnected);
+    }
+    async componentWillUnmount() {
+        await connection.invoke("StopReceivingData");
+        await connection.stop();
+    }
+    async connect() {
         connection.start()
             .then(() => {
                 console.info('SignalR Connected');
                 this.startReceivingData();
             })
             .catch(err => console.error('SignalR Connection Error: ', err));
-        connection.on('connected', this.onSocketConnected);
-        connection.on('dataReceived', this.onDataReceived);
-        connection.on('disconnected', this.onNotifReceived);
-    }
-    async componentWillUnmount() {
-        await connection.invoke("StopReceivingData");
-        await connection.stop();
     }
     startReceivingData() {
-        connection.invoke("StartReceivingData", this.state.selectedTradingPair);
+        if (connection.state == signalR.HubConnectionState.Connected) {
+            connection.invoke("StartReceivingData", this.state.selectedTradingPair);
+        }
+        else {
+            this.connect();
+        }
     }
     onSocketConnected(res) {
         console.info('SocketConnected');
         this.startReceivingData();
     }
-
+    onSocketDisConnected() {
+        console.info('SocketDisconnected');
+    }
     onDataReceived(res) {
         // update order book table
         this.setState({ orderBookData: res.orderBookData });
@@ -60,7 +70,6 @@ export class OrderBook extends Component {
 
     updateCharts(response) {
         // update state with chart data
-        // const arrayPrototype = ['price','bids','asks'];
         this.setState({
             orderBookChartData: response.orderBookChartData,
             marketDepthChartData: response.marketDepthChartData,
@@ -72,8 +81,7 @@ export class OrderBook extends Component {
     async selectTradingPair(event) {
         this.setState({ selectedTradingPair: event.target.value });
         await connection.invoke("StopReceivingData")
-            .then(async () => await connection.invoke("StartReceivingData", this.state.selectedTradingPair));
-        
+            .then(async () => this.startReceivingData());
     }
     render() {
         return (
