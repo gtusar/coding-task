@@ -18,3 +18,13 @@ BONUS TASKS
 OTHER NOTES
 Please use GIT while developing the code. Keep it as simple as the nature of this problem allows it. Do not over-engineer. Be ready to explain / demonstrate your solution in our office (or in a remote chat).
 May the force be with you.
+
+UI
+
+Order book
+
+![Order Book](orderbookUI.png)
+
+Audit log
+
+![Audit Log](auditlog.png)

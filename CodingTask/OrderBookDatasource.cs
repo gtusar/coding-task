@@ -86,7 +86,6 @@ namespace CodingTask
                 semaphore.Release();
             }
         }
-
     
         private async Task InformClientsStateChange(WebSocketState dataSourceState)
         {
