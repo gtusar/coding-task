@@ -6,14 +6,20 @@ using System.Threading.Tasks;
 
 namespace CodingTask.Models
 {
+    /// <summary>
+    /// Classes to comply with Bitstamp WebSocket described here: https://www.bitstamp.net/websocket/v2/
+    /// Subscription class stringifies to valid JSON message that the websocket accepts
+    /// </summary>
     public class Subscription
     {
         public Subscription()
         {
             this.Data = new ChannelData();
         }
+        
         [JsonProperty("event")]
         public string Event  { get; set; }
+        
         [JsonProperty("data")]
         public ChannelData Data { get; set; }
     }
@@ -21,16 +27,16 @@ namespace CodingTask.Models
     {
         public Subscribe(string tradingPair)
         {
-            this.Event = "bts:subscribe";
-            this.Data.Channel = $"order_book_{tradingPair}";
+            Event = "bts:subscribe";
+            Data.Channel = $"order_book_{tradingPair}";
         }
     }
     public class Unsubscribe: Subscription
     {
         public Unsubscribe(string tradingPair)
         {
-            this.Event = "bts:unsubscribe";
-            this.Data.Channel = $"order_book_{tradingPair}";
+            Event = "bts:unsubscribe";
+            Data.Channel = $"order_book_{tradingPair}";
         }
     }
     public class ChannelData

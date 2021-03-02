@@ -1,5 +1,8 @@
 ﻿import React, { PureComponent } from 'react';
 
+/**
+ * Show rotating loading indicator
+ * */
 export default class Loader extends PureComponent {
     render() {
         return (

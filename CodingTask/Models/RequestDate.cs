@@ -5,6 +5,9 @@ using System.Threading.Tasks;
 
 namespace CodingTask.Models
 {
+    /// <summary>
+    /// Class to parse API request
+    /// </summary>
     public class RequestDate
     {
         private DateTime _timestamp;

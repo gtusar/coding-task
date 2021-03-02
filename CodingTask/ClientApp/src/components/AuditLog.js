@@ -3,7 +3,9 @@ import React, { Component, PureComponent } from 'react';
 import { OrderBookTable, OrderBookBarChart } from './OrderBook';
 import Loader from './Loader';
 
-
+/**
+ * Audit log with possible orderbooks from history and with possibility to show details
+ * */
 export class AuditLog extends Component {
 
     constructor(props) {
@@ -18,14 +20,59 @@ export class AuditLog extends Component {
         this.clickedTimestamp = this.clickedTimestamp.bind(this);
     }
 
+    /**
+     * Ract lifetime functions
+     * */
     componentDidMount() {
         this.getAvailableTimestamps();
     }
+
+    /**
+     * Get price timeline with available orderbooks
+     * */
+    async getAvailableTimestamps() {
+        const response = await fetch('AuditLogData');
+        const data = await response.json();
+        this.setState({ availableTimestamps: data, loading: false });
+    }
+
+    /**
+     * When user clicks on a bar in timeline fetch details
+     * @param {any} timestamp
+     * */
     clickedTimestamp(timestamp) {
         this.setState({ detailsLoading: true });
         this.getOrderBookDetails(timestamp);
     }
-   
+
+    /**
+     * Fetch details from server
+     * @param {any} selectedTimestamp
+     * */
+    async getOrderBookDetails(selectedTimestamp) {
+        const requestOptions = {
+            method: 'POST',
+            dataType: 'json',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ timestamp: selectedTimestamp })
+        };
+
+        const response = await fetch('AuditLogData', requestOptions);
+        let data, orderBookDataAvailable;
+
+        if (response.ok) {
+            data = await response.json();
+            orderBookDataAvailable = true;
+        }
+        else {
+            orderBookDataAvailable = false;
+        }
+        this.setState({ orderBookData: data, orderBookDataAvailable: orderBookDataAvailable, detailsLoading: false });
+    }
+
+    /**
+     * React render UI function
+     * */
     render() {
         const loadingOrChart = function (doShow, chart) {
             if (doShow) {
@@ -50,11 +97,11 @@ export class AuditLog extends Component {
                 </div>
                 {(this.state.detailsLoading || this.state.orderBookDataAvailable) &&
                     <div className="row">
-                        <div className="col-sm-6">
-                        {loadingOrChart(this.state.orderBookDataAvailable, <OrderBookTable data={this.state.orderBookData.orderBookData} clickedTimestamp={this.clickedTimestamp} />)}
+                        <div className="col-xs-12 col-md-6">
+                            {loadingOrChart(this.state.orderBookDataAvailable, <OrderBookTable data={this.state.orderBookData.orderBookData} clickedTimestamp={this.clickedTimestamp} />)}
                         </div>
-                        <div className="col-sm-6">
-                        {loadingOrChart(this.state.orderBookDataAvailable, <OrderBookBarChart data={this.state.orderBookData.marketDepthChartData} clickedTimestamp={this.clickedTimestamp} />)}
+                        <div className="col-xs-12 col-md-6">
+                            {loadingOrChart(this.state.orderBookDataAvailable, <OrderBookBarChart data={this.state.orderBookData.marketDepthChartData} clickedTimestamp={this.clickedTimestamp} />)}
                         </div>
                     </div>
                 }
@@ -62,42 +109,22 @@ export class AuditLog extends Component {
         );
     }
 
-    async getAvailableTimestamps() {
-        const response = await fetch('AuditLogData');
-        const data = await response.json();
-        this.setState({ availableTimestamps: data, loading: false });
-    }
 
-    async getOrderBookDetails(selectedTimestamp) {
-        const requestOptions = {
-            method: 'POST',
-            dataType: 'json',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ timestamp: selectedTimestamp })
-        };
-
-        const response = await fetch('AuditLogData', requestOptions);
-        let data, orderBookDataAvailable;
-
-        if (response.ok) { 
-            data = await response.json();
-            orderBookDataAvailable = true;
-        }
-        else
-        {
-            orderBookDataAvailable = false;
-        }
-        this.setState({ orderBookData: data, orderBookDataAvailable: orderBookDataAvailable, detailsLoading: false });
-    }
 }
 
-
+/**
+ * Timeline diplaying history of lowest ask price
+ * */
 export default class AuditLogChart extends PureComponent {
     state = {
         data: this.props.data,
         activeIndex: 0,
     };
-
+    /**
+     * User clicked on a bar in chart event listener
+     * @param {object} data bar data
+     * @param {number} index clicked bar index
+     */
     handleBarClicked = (data, index) => {
         this.props.clickedTimestamp(this.state.data[index].timestamp);
         this.setState({
@@ -105,6 +132,9 @@ export default class AuditLogChart extends PureComponent {
         });
     };
 
+    /**
+     * React render UI function
+     * */
     render() {
         const { activeIndex, data } = this.state;
         const activeItem = data[activeIndex];

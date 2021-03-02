@@ -13,9 +13,13 @@ namespace CodingTask
 {
     public class BitstampWS : IDisposable
     {
-        public event EventHandler<BitstampWSResponse> ResponseReceived;
         public event EventHandler Connected;
         public event EventHandler Disconnected;
+        public event EventHandler<BitstampWSResponse> ResponseReceived;
+
+        private string url = "wss://ws.bitstamp.net";
+        private string TradingPair { get; set; }
+        public int ReceiveBufferSize { get; set; } = 8192;
         private ClientWebSocket WS;
         private CancellationTokenSource CTS;
         private CancellationTokenSource CTSReadLoop;
@@ -35,10 +39,12 @@ namespace CodingTask
                 return _subscriptionStatus;
             }
         }
-        private string url = "wss://ws.bitstamp.net";
-        private string TradingPair { get; set; }
-        public int ReceiveBufferSize { get; set; } = 8192;
 
+        /// <summary>
+        /// Create and connect web socket instance
+        /// Trigger Connected event on success
+        /// </summary>
+        /// <returns></returns>
         private async Task ConnectAsync()
         {
             if (WS != null)
@@ -56,7 +62,13 @@ namespace CodingTask
             }
         }
 
-        public async Task Subscribe(string tradingPair = "btceur")
+        /// <summary>
+        /// Subscribe to selected trading pair channel
+        /// On success start ReceivingLoop to handle incoming data
+        /// </summary>
+        /// <param name="tradingPair"></param>
+        /// <returns></returns>
+        public async Task SubscribeAsync(string tradingPair = "btceur")
         {
             try
             {
@@ -81,7 +93,12 @@ namespace CodingTask
                 return;
             }
         }
-        public async Task Unsubscribe()
+
+        /// <summary>
+        /// Stop ReceivingLoop and unsubscribe from channel
+        /// </summary>
+        /// <returns></returns>
+        public async Task UnsubscribeAsync()
         {
             CTSReadLoop.Cancel();
             if(_subscriptionStatus == SubscriptionState.Subscribed)
@@ -90,6 +107,11 @@ namespace CodingTask
                 _subscriptionStatus = response == WebSocketResponse.Ok ? SubscriptionState.Unsubscribed : SubscriptionState.Subscribed;
             }
         }
+
+        /// <summary>
+        /// Unsubscribe, cancel ReceivingLoop and dispose web socket client
+        /// </summary>
+        /// <returns></returns>
         public async Task DisconnectAsync()
         {
             if (WS is null) return;
@@ -122,10 +144,13 @@ namespace CodingTask
             CTS.Dispose();
             CTS = null;
             CTSReadLoop.Dispose();
-            CTSReadLoop.Dispose();
-
+            CTSReadLoop = null;
         }
 
+        /// <summary>
+        /// Read data from web socket to memory and call read response
+        /// </summary>
+        /// <returns></returns>
         private async Task ReceiveLoop()
         {
             var loopToken = CTSReadLoop.Token;
@@ -151,7 +176,7 @@ namespace CodingTask
                         {
                             await DisconnectAsync();
                             await ConnectAsync();
-                            await Subscribe();                            
+                            await SubscribeAsync();                            
                         }
                         _WSsemaphore.Release();
                     }
@@ -168,6 +193,12 @@ namespace CodingTask
             }
         }
 
+        /// <summary>
+        /// Method for sending subscription or unsubscription message
+        /// </summary>
+        /// <typeparam name="RequestType"></typeparam>
+        /// <param name="message"></param>
+        /// <returns></returns>
         private async Task<WebSocketResponse> Subscription<RequestType>(RequestType message)
         {
             byte[] sendBytes = Encoding.UTF8.GetBytes(Newtonsoft.Json.JsonConvert.SerializeObject(message));
@@ -186,12 +217,17 @@ namespace CodingTask
             {
                 await DisconnectAsync();
                 await ConnectAsync();
-                await Subscribe();
+                await SubscribeAsync();
             }
             _WSsemaphore.Release();
             return succeded ? WebSocketResponse.Ok : WebSocketResponse.Error;
         }
 
+        /// <summary>
+        /// Parse received stream of data to object.
+        /// Call ResponseReceived event
+        /// </summary>
+        /// <param name="inputStream"></param>
         private void ReadResponse(Stream inputStream)
         {
             try
